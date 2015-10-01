@@ -33,8 +33,8 @@
     #include <QSysInfo>
 #endif
 
-#define UPDATE_URL_SOURCEFORGE "http://simplechatclien.sourceforge.net/update.xml"
 #define UPDATE_URL_GITHUB "http://simplechatclient.github.io/update.xml"
+#define UPDATE_URL_SOURCEFORGE "http://simplechatclien.sourceforge.net/update.xml"
 
 Update * Update::Instance = 0;
 
@@ -64,15 +64,13 @@ Update::~Update()
 
 void Update::checkUpdate()
 {
-    checkUpdateSourceforge();
+    checkUpdateGithub();
 }
 
-void Update::checkUpdateSourceforge()
+void Update::updateRequest(const QString &strMethod, const QString &strUrl, const QString &strUrlMarker)
 {
-    QString strUrl = UPDATE_URL_SOURCEFORGE;
-
     QString strAgentPlatform = this->getPlatform();
-    QString strAgentUrl = "http://simplechatclien.sourceforge.net";
+    QString strAgentUrl = "http://simplechatclient.github.io";
     QString strAgentProgram = "SimpleChatClient";
     QString strAgentVersion = Settings::instance()->get("version");
     QString strUserAgent = QString("Mozilla/5.0 (%1; +%2) %3/%4").arg(strAgentPlatform, strAgentUrl, strAgentProgram, strAgentVersion);
@@ -83,25 +81,29 @@ void Update::checkUpdateSourceforge()
 
     QString strUUID = Settings::instance()->get("unique_id");
     QRegExp rUUID("^[a-f0-9]{8}-([a-f0-9]{4}-){3}[a-f0-9]{12}$");
-    if ((!strUUID.isEmpty()) && (rUUID.exactMatch(strUUID)))
+    if ((strMethod == "POST") && (!strUUID.isEmpty()) && (rUUID.exactMatch(strUUID)))
     {
         QString strContent = QString("{\"uuid\":\"%1\"}").arg(strUUID);
 
         request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
         QNetworkReply *pReply = accessManager->post(request, strContent.toLatin1());
-        pReply->setProperty("update_url", UPDATE_URL_SOURCEFORGE);
+        pReply->setProperty("update_url", strUrlMarker);
     }
     else
     {
         QNetworkReply *pReply = accessManager->get(request);
-        pReply->setProperty("update_url", UPDATE_URL_SOURCEFORGE);
+        pReply->setProperty("update_url", strUrlMarker);
     }
 }
 
 void Update::checkUpdateGithub()
 {
-    QNetworkReply *pReply = accessManager->get(QNetworkRequest(QUrl(UPDATE_URL_GITHUB)));
-    pReply->setProperty("update_url", UPDATE_URL_GITHUB);
+    updateRequest("GET", UPDATE_URL_GITHUB, UPDATE_URL_GITHUB);
+}
+
+void Update::checkUpdateSourceforge()
+{
+    updateRequest("POST", UPDATE_URL_SOURCEFORGE, UPDATE_URL_SOURCEFORGE);
 }
 
 int Update::fastParseVersion(QString strVersionXml)
@@ -182,8 +184,7 @@ void Update::updateFinished(QNetworkReply *reply)
         QVariant possibleRedirectUrl = reply->attribute(QNetworkRequest::RedirectionTargetAttribute);
         if (!possibleRedirectUrl.toUrl().isEmpty())
         {
-            QNetworkReply *replyRedirect = accessManager->get(QNetworkRequest(possibleRedirectUrl.toUrl()));
-            replyRedirect->setProperty("update_url", update_url);
+            updateRequest("GET", possibleRedirectUrl.toString(), update_url);
             return;
         }
 
@@ -194,19 +195,19 @@ void Update::updateFinished(QNetworkReply *reply)
 
     if (hUpdateResults.size() == 1)
     {
-        checkUpdateGithub();
+        checkUpdateSourceforge();
     }
     else if (hUpdateResults.size() == 2)
     {
-        int updateSourceforge = fastParseVersion(hUpdateResults.value(UPDATE_URL_SOURCEFORGE));
         int updateGithub = fastParseVersion(hUpdateResults.value(UPDATE_URL_GITHUB));
+        int updateSourceforge = fastParseVersion(hUpdateResults.value(UPDATE_URL_SOURCEFORGE));
 
-        if ((updateSourceforge != 0) && (updateGithub != 0))
+        if ((updateGithub != 0) || (updateSourceforge != 0))
         {
-            if (updateSourceforge >= updateGithub)
-                saveUpdate(hUpdateResults.value(UPDATE_URL_SOURCEFORGE));
-            else
+            if (updateGithub >= updateSourceforge)
                 saveUpdate(hUpdateResults.value(UPDATE_URL_GITHUB));
+            else
+                saveUpdate(hUpdateResults.value(UPDATE_URL_SOURCEFORGE));
 
             if (!Settings::instance()->get("motd").isEmpty())
             {
@@ -222,7 +223,7 @@ void Update::updateFinished(QNetworkReply *reply)
                 // save status
                 Settings::instance()->set("version_status", strVersionStatus);
 
-                if (Settings::instance()->get("updates") == "true")
+                if (Settings::instance()->getBool("updates"))
                     Notification::instance()->refreshUpdate();
             }
         }
@@ -235,23 +236,29 @@ QString Update::getPlatform()
 #ifdef Q_OS_WIN
     switch (QSysInfo::windowsVersion())
     {
-        case 0x0001: strPlatform = "Windows 3.1"; break;
-        case 0x0002: strPlatform = "Windows 95"; break;
-        case 0x0003: strPlatform = "Windows 98"; break;
-        case 0x0004: strPlatform = "Windows Me"; break;
-        case 0x0010: strPlatform = "Windows NT 4.0"; break;
-        case 0x0020: strPlatform = "Windows NT 5.0"; break;
-        case 0x0030: strPlatform = "Windows NT 5.1"; break;
-        case 0x0040: strPlatform = "Windows NT 5.2"; break;
-        case 0x0080: strPlatform = "Windows NT 6.0"; break;
-        case 0x0090: strPlatform = "Windows NT 6.1"; break;
-        case 0x00a0: strPlatform = "Windows NT 6.2"; break;
-        case 0x00b0: strPlatform = "Windows NT 6.3"; break;
+        case QSysInfo::WV_32s: strPlatform = "Windows 3.1"; break;
+        case QSysInfo::WV_95: strPlatform = "Windows 95"; break;
+        case QSysInfo::WV_98: strPlatform = "Windows 98"; break;
+        case QSysInfo::WV_Me: strPlatform = "Windows Me"; break;
 
-        case 0x0100: strPlatform = "Windows CE"; break;
-        case 0x0200: strPlatform = "Windows CE .NET"; break;
-        case 0x0300: strPlatform = "Windows CE 5.x"; break;
-        case 0x0400: strPlatform = "Windows CE 6.x"; break;
+        case QSysInfo::WV_NT: strPlatform = "Windows NT"; break;
+        case QSysInfo::WV_2000: strPlatform = "Windows 2000"; break;
+        case QSysInfo::WV_XP: strPlatform = "Windows XP"; break;
+        case QSysInfo::WV_2003: strPlatform = "Windows 2003"; break;
+        case QSysInfo::WV_VISTA: strPlatform = "Windows Vista"; break;
+        case QSysInfo::WV_WINDOWS7: strPlatform = "Windows 7"; break;
+        case QSysInfo::WV_WINDOWS8: strPlatform = "Windows 8"; break;
+#if QT_VERSION >= QT_VERSION_CHECK(5, 2, 0)
+        case QSysInfo::WV_WINDOWS8_1: strPlatform = "Windows 8.1"; break;
+#endif
+#if QT_VERSION >= QT_VERSION_CHECK(5, 5, 0)
+        case QSysInfo::WV_WINDOWS10: strPlatform = "Windows 10"; break;
+#endif
+
+        case QSysInfo::WV_CE: strPlatform = "Windows CE"; break;
+        case QSysInfo::WV_CENET: strPlatform = "Windows CE .NET"; break;
+        case QSysInfo::WV_CE_5: strPlatform = "Windows CE 5.x"; break;
+        case QSysInfo::WV_CE_6: strPlatform = "Windows CE 6.x"; break;
 
         default: strPlatform = "Windows"; break;
     }

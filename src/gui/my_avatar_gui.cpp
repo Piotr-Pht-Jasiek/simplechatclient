@@ -24,6 +24,7 @@
 
 #include "widgets/avatar_list_widget.h"
 #include "core/core.h"
+#include "models/avatar.h"
 #include "models/my_profile.h"
 #include "onet/onet_avatar.h"
 #include "models/settings.h"
@@ -77,10 +78,10 @@ void MyAvatarGui::getAvatarReady(const QByteArray &content, const QString &avata
     QPixmap pixmap;
     if (!pixmap.loadFromData(content))
     {
-        if (Settings::instance()->get("debug") == "true")
+        if (Settings::instance()->getBool("debug"))
             qWarning() << "Unable to load image from " << avatarUrl;
 
-        ui.label_my_avatar->setText(tr("No photo available"));
+        ui.label_my_avatar->setPixmap(QPixmap(Avatar::instance()->getEmptyRegisteredUserAvatar()));
         return;
     }
 
@@ -95,7 +96,7 @@ void MyAvatarGui::refreshAvatar()
     if (!avatarUrl.isEmpty())
         onetAvatar->requestGetAvatar(avatarUrl, OnetAvatar::AT_other);
     else
-        ui.label_my_avatar->setText(tr("No photo available"));
+        ui.label_my_avatar->setPixmap(QPixmap(Avatar::instance()->getEmptyRegisteredUserAvatar()));
 }
 
 void MyAvatarGui::avatarSelected(const QString &avatarUrl)

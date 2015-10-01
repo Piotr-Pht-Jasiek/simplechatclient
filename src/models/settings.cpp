@@ -40,12 +40,13 @@ void Settings::init()
 {
     clear();
 
-    set("version", "2.1.0.0");
+    set("version", "2.2.0.0");
 }
 
 void Settings::clear()
 {
     settings.clear();
+    bSettings.clear();
 }
 
 QString Settings::get(const QString &key)
@@ -53,7 +54,17 @@ QString Settings::get(const QString &key)
     return settings.value(key, QString::null);
 }
 
+bool Settings::getBool(const QString &key)
+{
+    return bSettings.value(key, false);
+}
+
 void Settings::set(const QString &key, const QString &value)
 {
     settings[key] = value;
+}
+
+void Settings::setBool(const QString &key, bool value)
+{
+    bSettings[key] = value;
 }
